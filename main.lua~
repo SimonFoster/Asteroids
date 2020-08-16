@@ -1,0 +1,234 @@
+debug = true
+
+function tprint( x, n )
+	if debug and x then
+		print( x )
+		if type( x ) == 'table' then
+			local n = n or 0
+			for k, v in pairs( x ) do
+				print( n, string.rep( ' ', n ), k, ':', v )
+			end
+			local mt = getmetatable( x )
+			tprint( mt, n+1 )
+		end
+		print '----'
+	end
+end
+
+local rad = math.rad
+function sin(x) return math.sin( rad(x) ) end
+function cos(x) return math.cos( rad(x) ) end
+
+sounds = {}
+sounds.shoot = love.audio.newSource( "sounds/asteroids_shoot.ogg", "static" )
+ 
+
+vector = {}
+
+function vector:new( x, y )
+	local vec = { x = x, y = y }
+	setmetatable( vec, self )
+	self.__index = self
+	return vec
+end
+
+function vector:copy()
+    return vector:new( self.x, self.y )
+end
+
+function vector.__add( op1, op2 )
+    return vector:new( op1.x + op2.x, op1.y + op2.y )
+end
+
+function vector.__mul( op1, op2 )
+    if getmetatable(op1) == vector then
+        return vector:new( op1.x * op2, op1.y * op2 )
+    elseif getmetatable(op2) == vector then
+        return vector:new( op1 * op2.x, op1 * op2.y )
+    else
+        print( op1, op2 )
+        error( 'Not a vector' )
+    end    
+end
+
+function move( obj, dt )
+end
+
+bullet = {}
+
+function bullet:new( tbl )
+	local b = tbl or {}
+	setmetatable( b, self )
+	self.__index = self
+	return b
+end
+
+function bullet:update( dt )
+	self.position = self.position + self.velocity * dt
+end
+
+function bullet:draw()
+
+	local x, y = self.position.x, self.position.y
+	local angle = self.angle
+
+	local dx, dy
+
+	dx = cos( angle ) * 2
+	dy = sin( angle ) * 2
+	p1x, p1y = x + dx, y + dy
+
+	love.graphics.line( x, y, p1x, p1y )
+end
+
+spaceship = {}
+
+function spaceship:new( tbl )
+	local ship = tbl or {}
+	setmetatable( ship, self )
+	self.__index = self
+	return ship
+end
+
+
+function spaceship:update( dt )
+
+	local function wrap( p, min, max )
+        if p > max then return p - max end
+        if p < min then return max - p end
+        return p
+	end
+	
+	self.position = self.position + self.velocity * dt
+
+	self.position.x = wrap( self.position.x, 0, love.graphics.getWidth() )
+	self.position.y = wrap( self.position.y, 0, love.graphics.getHeight() )
+
+    -- allow for some kind of drag
+    self.velocity = self.velocity * 0.995
+end
+
+function spaceship:draw()
+
+	local x, y = self.position.x, self.position.y
+	local angle = self.angle
+
+	local dx, dy
+
+	dx = cos( angle ) * 10
+	dy = sin( angle ) * 10
+	p1x, p1y = x + dx, y + dy
+
+	angle = angle + 150
+
+	dx = cos( angle ) * 10
+	dy = sin( angle ) * 10
+	p2x, p2y = x + dx, y + dy
+
+	angle = angle + 60
+
+	dx = cos( angle ) * 10
+	dy = sin( angle ) * 10
+	p3x, p3y = x + dx, y + dy
+
+	love.graphics.line( p1x, p1y, p2x, p2y )
+	love.graphics.line( p2x, p2y, p3x, p3y )
+	love.graphics.line( p3x, p3y, p1x, p1y )
+
+	love.graphics.print( string.format(
+	                        '%3.1f %4d %4d %4d',
+	                        self.angle,
+							self.velocity.x,
+							self.velocity.y,
+							love.timer.getFPS() ),
+							600, 580 )
+end
+
+function spaceship:turn( a )
+	self.angle = ( self.angle + a ) % 360
+end
+
+function spaceship:thrust()
+	dv = vector:new( cos( self.angle ) * 10, sin( self.angle ) * 10 )
+	self.velocity = self.velocity + dv
+end
+
+function spaceship:shoot()
+	if #game.objects.bullets < 5 then
+	    love.audio.play(sounds.shoot)
+    	bullet = bullet:new()
+	    bullet.position = self.position:copy()
+    	bullet.velocity = self.velocity:copy()
+    	bullet.angle = self.angle
+	    dv = vector:new( cos( self.angle ), sin( self.angle ))
+    	dv = dv * 300
+	    bullet.velocity = bullet.velocity + dv
+	    table.insert( game.objects.bullets, bullet )
+    end
+end
+
+function values( tbl )
+	local i = 0
+	return function() i = i + 1; return tbl[i] end
+end
+
+function map( func, tbl )
+    local newtbl = {}
+    for v in values( t ) do table.insert( newtbl, func( v )) end
+    return newtbl
+end
+
+function love.load()
+	game = {}
+	game.name = 'game'
+	game.objects={}
+	game.objects.bullets={}
+	local ship = spaceship:new{ 
+					position = vector:new( 400, 300 ),
+					velocity = vector:new( 0, 0 ),
+					angle = 0 }
+	game.objects.ship = ship
+end
+
+function love.update( dt )
+	
+	local b = game.objects.bullets
+	
+	for i = #b, 1, -1 do
+        if  b[i].position.x < 0 or 
+	        b[i].position.x > love.graphics.getWidth() or
+	        b[i].position.y < 0 or 
+	        b[i].position.y > love.graphics.getHeight() 
+        then 
+	        table.remove( b, i )
+	    end
+	end
+	
+	for i = 1, #b do b[i]:update( dt ) end
+
+    game.objects.ship:update( dt )
+    
+end
+
+function love.draw()
+	local b = game.objects.bullets
+	for i = 1, #b do b[i]:draw() end
+    game.objects.ship:draw()
+	-- for k, v in pairs( game.objects ) do v:draw() end
+end
+
+function love.keypressed( key, unicode )
+	
+	local function sum ( a, b )
+		a = a + b
+	end
+
+	-- print( key, unicode )
+	if     key == "escape"  then love.event.push( 'quit' )
+    elseif key == 'left'    then game.objects.ship:turn( -30 ) 
+    elseif key == 'right'   then game.objects.ship:turn( 30 )
+    elseif key == 'up'      then game.objects.ship:thrust()
+    elseif key == ' '       then game.objects.ship:shoot()
+   	end
+end
+

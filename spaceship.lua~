@@ -1,0 +1,95 @@
+module( ..., package.seeall )
+
+require "vectors"
+require "sounds"
+require "bullets"
+
+spaceship = {}
+
+function spaceship:new()
+	local ship = {}
+
+	ship.position = vectors.vector:new( 400, 300 )
+	ship.velocity = vectors.vector:new( 0, 0 )
+	ship.angle = 0
+	ship.size = 5
+
+	setmetatable( ship, self )
+	self.__index = self
+	return ship
+end
+
+
+function spaceship:update( dt )
+
+	local function wrap( p, min, max )
+        if p > max then return p - max end
+        if p < min then return max - p end
+        return p
+	end
+	
+	self.position = self.position + self.velocity * dt
+
+	self.position.x = wrap( self.position.x, 0, love.graphics.getWidth() )
+	self.position.y = wrap( self.position.y, 0, love.graphics.getHeight() )
+
+    -- allow for some kind of drag.  This *must* depend on dt
+	-- delta_v = a * delta_t
+	local a = -0.1 * self.velocity 
+	local delta_v = a * dt
+    self.velocity = self.velocity + delta_v
+end
+
+function spaceship:predraw()
+	assert( self.angle )
+	local angle = self.angle
+	local vec = vectors.vector
+	self.p1 = 10 * vec:unit( angle )
+	self.p2 = 8  * vec:unit( angle + 150 )
+	self.p3 = 8  * vec:unit( angle + 210 )
+	return self
+end
+
+function spaceship:draw()
+
+	local p1 = self.position + self.p1
+	local p2 = self.position + self.p2
+	local p3 = self.position + self.p3
+
+	utils.vline( p1, p2 )
+	utils.vline( p2, p3 )
+	utils.vline( p3, p1 )
+
+	-- love.graphics.circle( "line", self.position.x, self.position.y, self.size )
+
+	return self
+end
+
+function spaceship:turn( angle )
+	assert( self.angle )
+	self.angle = ( self.angle + angle ) % 360
+	self:predraw()
+	return self
+end
+
+function spaceship:thrust( delta )
+	assert( self.angle and self.velocity )
+	local delta_v = delta * vectors.vector:unit( self.angle )
+	self.velocity = self.velocity + delta_v
+end
+
+function spaceship:shoot()
+	if #game.objects.bullets < 5 then
+	    love.audio.play( sounds.shoot )
+    	local bullet = bullets.bullet:new( self )
+	    table.insert( game.objects.bullets, bullet )
+    end
+end
+
+function spaceship:hyperspace()
+	local rand = math.random
+	local vec  = vectors.vector
+	self.position = vec:new( rand(800), rand(600) )
+	self.velocity = vec:new( 0, 0 )
+end
+
